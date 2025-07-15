@@ -4,23 +4,97 @@
     <title>Pixel canvas!</title>
     <script src="https://openseadragon.github.io/openseadragon/openseadragon.min.js"></script>
     <style>
-        body, html { width: 100%; height: 100%; margin: 0; background-color: #333; overflow: hidden; }
+        body, html { 
+            width: 100%; 
+            height: 100%; 
+            margin: 0; 
+            background-color: #1a1a2e;
+            overflow: hidden; 
+        }
         #openseadragon-viewer { width: 100%; height: 100%; }
+
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #444;
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+        }
+        #controls button {
+            background-color: rgba(0,0,0,0.5);
+            border: 1px solid #fff;
+            color: #fff;
+            font-size: 16px;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
     </style>
 </head>
 <body>
-    <div id="openseadragon-viewer"></div>
-<script type="text/javascript">
-    var viewer = OpenSeadragon({
-        id: "openseadragon-viewer",
-        prefixUrl: "https://openseadragon.github.io/openseadragon/images/",
-        tileSources: "canvas.dzi",
-        imageSmoothingEnabled: false,
+    <div id="loader">
+        <div class="spinner"></div>
+    </div>
 
-        maxZoomPixelRatio: 20, 
-        
-        minZoomLevel: 0.8
-    });
-</script>
+    <div id="controls">
+        <button id="home-btn">⌂</button> </div>
+
+    <div id="openseadragon-viewer"></div>
+
+    <script type="text/javascript">
+        var viewer = OpenSeadragon({
+            id: "openseadragon-viewer",
+            prefixUrl: "https://openseadragon.github.io/openseadragon/images/",
+            tileSources: "canvas.dzi",
+
+            imageSmoothingEnabled: false,
+            maxZoomPixelRatio: 10,
+            minZoomLevel: 0.8,
+            showNavigator:  true,
+            navigatorPosition: "BOTTOM_RIGHT",
+            blendTime: 0,
+            animationTime: 0.4,
+            immediateRender: true,
+            maxImageCacheCount: 400,
+
+            constrainDuringPan: true,      // Не даем утащить холст за пределы экрана
+            quickZoomOnClick: false        // Отключаем резкий зум по клику (важно для мобильных)
+        });
+
+        var loader = document.getElementById('loader');
+        var homeBtn = document.getElementById('home-btn');
+
+        viewer.addHandler('open', function() {
+            loader.style.display = 'none';
+
+            homeBtn.addEventListener('click', function() {
+                viewer.viewport.goHome(false); // Возвращаем вид в начало без анимации
+            });
+        });
+    </script>
 </body>
 </html>
