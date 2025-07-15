@@ -1,38 +1,86 @@
+# The name of the workflow, which will appear in the "Actions" tab on GitHub.
 name: Deploy Canvas to GitHub Pages
 
+# --- Triggers ---
+# This section defines when the workflow should automatically run.
 on:
   push:
+    # It runs on any push to the 'main' branch.
     branches:
       - main
+    # BUT, only if the push includes changes to one of the following files.
+    # This prevents the workflow from running unnecessarily.
     paths:
-      - 'source/canvas.png'
+      # Trigger if the source Aseprite file is updated.
+      - 'source/canvas.aseprite'
+      # Trigger if the main HTML file is updated.
       - 'index.html'
+  
+  # This allows you to manually trigger the workflow from the "Actions" tab.
+  # It's useful for debugging or forcing a redeployment.
   workflow_dispatch:
 
+# --- Jobs ---
+# A workflow is made up of one or more jobs that run in parallel or sequentially.
 jobs:
+  # We have a single job named 'deploy'.
   deploy:
+    # The type of virtual machine to run the job on. 'ubuntu-latest' is a standard choice.
     runs-on: ubuntu-latest
+    
+    # --- Permissions ---
+    # We need to explicitly grant the workflow permission to write to the repository.
+    # This is required for the 'peaceiris/actions-gh-pages@v4' action to push the built site.
     permissions:
       contents: write
+
+    # --- Steps ---
+    # A job contains a sequence of tasks called steps.
     steps:
+      # Step 1: Check out the repository's code.
+      # This downloads your repository's files into the virtual machine so the job can access them.
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install VIPS
-        run: sudo apt-get update && sudo apt-get install -y libvips-tools
+      # Step 2: Set up the Node.js environment.
+      # The Aseprite to JSON converter tool is a Node.js package, so we need Node.js to run it.
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          # We specify a stable version of Node.js.
+          node-version: '18'
 
+      # Step 3: Install the Aseprite to JSON converter.
+      # This command uses npm (Node Package Manager) to install the converter tool globally in the virtual machine.
+      - name: Install Aseprite to JSON converter
+        run: npm install -g @aseprite-cli/cli
+
+      # Step 4: Create a directory for the published site.
+      # We create a 'public' directory to hold all the files that will make up the final website.
       - name: Create public directory
         run: mkdir public
 
-      - name: Generate Optimized DZI tiles
-        run: vips dzsave source/canvas.png public/canvas --layout dz --suffix .png --tile-size 256 --overlap 0
+      # Step 5: Convert the Aseprite file to JSON.
+      # This is the core step. It runs the converter tool.
+      # --data: Specifies the output file for the JSON data.
+      # The final argument is the path to the input source file.
+      - name: Convert Aseprite to JSON
+        run: aseprite-cli --data public/canvas.json source/canvas.aseprite
 
+      # Step 6: Copy the main HTML file to the public directory.
+      # The final website needs the index.html file to be served.
       - name: Copy index.html into public directory
         run: cp index.html public/
 
+      # Step 7: Deploy the contents of the 'public' directory to GitHub Pages.
+      # This action handles the complex process of pushing the built files to the 'gh-pages' branch.
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
+          # The token is automatically provided by GitHub Actions and is used for authentication.
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # This tells the action which directory contains the website to be published.
           publish_dir: ./public
+          # This option creates a clean history on the gh-pages branch, which is good practice.
           force_orphan: true
+
