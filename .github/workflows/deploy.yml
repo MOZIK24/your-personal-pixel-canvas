@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'source/canvas.png'
+      - 'index.html'
   workflow_dispatch:
 
 jobs:
