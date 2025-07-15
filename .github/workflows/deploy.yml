@@ -12,11 +12,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
-    # Новый блок: Выдаем роботу права на запись в репозиторий
     permissions:
       contents: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,8 +24,8 @@ jobs:
       - name: Create public directory
         run: mkdir public
 
-      - name: Generate DZI tiles into public directory
-        run: vips dzsave source/canvas.png public/canvas --layout dz --suffix .jpeg[Q=90]
+      - name: Generate Optimized DZI tiles
+        run: vips dzsave source/canvas.png public/canvas --layout dz --suffix .png --tile-size 256 --overlap 0
 
       - name: Copy index.html into public directory
         run: cp index.html public/
