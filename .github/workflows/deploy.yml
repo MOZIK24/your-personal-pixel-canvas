@@ -11,6 +11,11 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    
+    # Новый блок: Выдаем роботу права на запись в репозиторий
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
