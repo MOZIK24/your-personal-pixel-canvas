@@ -10,15 +10,17 @@
 </head>
 <body>
     <div id="openseadragon-viewer"></div>
-    <script type="text/javascript">
-        var viewer = OpenSeadragon({
-            id: "openseadragon-viewer",
-            prefixUrl: "https://openseadragon.github.io/openseadragon/images/",
-            // GitHub will find the correct file itself???
-            tileSources: "canvas.dzi",
-            // Setting for sharp pixels
-            imageSmoothingEnabled: false
-        });
-    </script>
+<script type="text/javascript">
+    var viewer = OpenSeadragon({
+        id: "openseadragon-viewer",
+        prefixUrl: "https://openseadragon.github.io/openseadragon/images/",
+        tileSources: "canvas.dzi",
+        imageSmoothingEnabled: false,
+
+        maxZoomPixelRatio: 10, 
+        
+        minZoomLevel: 0.8
+    });
+</script>
 </body>
 </html>
