@@ -1,100 +1,230 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Pixel canvas!</title>
-    <script src="https://openseadragon.github.io/openseadragon/openseadragon.min.js"></script>
+    <meta charset="UTF-8">
+    <!-- This meta tag is crucial for mobile devices. It sets the viewport to the device's width and disables user scaling, which we handle ourselves. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Pixel Canvas</title>
     <style>
-        body, html { 
-            width: 100%; 
-            height: 100%; 
-            margin: 0; 
-            background-color: #1a1a2e;
-            overflow: hidden; 
+        /* Basic reset to remove default browser margins and paddings. */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            /* Prevents scrollbars from appearing on the main page. */
+            overflow: hidden;
+            background-color: #2c2c2c;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
-        #openseadragon-viewer { width: 100%; height: 100%; }
 
+        /* The container for our canvas. It will handle mouse/touch events. */
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            /* The cursor indicates that the canvas can be grabbed and moved. */
+            cursor: grab;
+        }
+
+        /* The canvas element itself. */
+        canvas {
+            /* This is the most important CSS rule for pixel art. */
+            /* It tells the browser not to blur the pixels when scaling up. */
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges; /* Firefox fallback */
+            image-rendering: crisp-edges;   /* Older browsers fallback */
+        }
+
+        /* Styles for the loading indicator. */
         #loader {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: #1a1a2e;
+            background: #2c2c2c;
+            /* Flexbox is used to center the text both horizontally and vertically. */
             display: flex;
             justify-content: center;
             align-items: center;
-            z-index: 9999;
-        }
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 5px solid #444;
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        #controls {
-            position: absolute;
-            top: 10px;
-            left: 10px;
+            color: white;
+            font-size: 24px;
+            /* Ensures the loader is on top of everything else. */
             z-index: 100;
-        }
-        #controls button {
-            background-color: rgba(0,0,0,0.5);
-            border: 1px solid #fff;
-            color: #fff;
-            font-size: 16px;
-            width: 30px;
-            height: 30px;
-            cursor: pointer;
-            margin-right: 5px;
         }
     </style>
 </head>
 <body>
-    <div id="loader">
-        <div class="spinner"></div>
+    <!-- The loading indicator, visible until the canvas data is loaded and drawn. -->
+    <div id="loader">Loading canvas data...</div>
+
+    <!-- The main container for our canvas. -->
+    <div id="canvas-container">
+        <canvas id="pixel-canvas"></canvas>
     </div>
 
-    <div id="controls">
-        <button id="home-btn">⌂</button> </div>
+    <script>
+        // --- SETUP ---
+        // Get references to the DOM elements we will be working with.
+        const canvas = document.getElementById('pixel-canvas');
+        const ctx = canvas.getContext('2d', { alpha: false }); // 'alpha: false' is a performance optimization.
+        const loader = document.getElementById('loader');
 
-    <div id="openseadragon-viewer"></div>
+        // --- STATE MANAGEMENT ---
+        // This object holds the current state of our view: position (pan) and scale (zoom).
+        let transform = { x: 0, y: 0, scale: 1 };
+        // This object holds the raw image data from the Aseprite file.
+        let image = { data: null, width: 0, height: 0 };
+        // Flags to manage user interaction state.
+        let isDragging = false;
+        let lastPos = { x: 0, y: 0 };
 
-    <script type="text/javascript">
-        var viewer = OpenSeadragon({
-            id: "openseadragon-viewer",
-            prefixUrl: "https://openseadragon.github.io/openseadragon/images/",
-            tileSources: "canvas.dzi",
+        // --- CORE DRAWING LOGIC ---
+        /**
+         * The main render loop. This function is called every frame.
+         * It clears the canvas and redraws the image with the current transformations.
+         */
+        function render() {
+            // We can't render if there's no image data.
+            if (!image.data) return;
 
-            imageSmoothingEnabled: false,
-            maxZoomPixelRatio: 10,
-            minZoomLevel: 0.8,
-            showNavigator:  true,
-            navigatorPosition: "BOTTOM_RIGHT",
-            blendTime: 0,
-            animationTime: 0.4,
-            immediateRender: true,
-            maxImageCacheCount: 400,
+            // Get the container's dimensions to fill the screen.
+            const screenWidth = container.clientWidth;
+            const screenHeight = container.clientHeight;
+            
+            // Set the canvas drawing buffer size to match the screen.
+            canvas.width = screenWidth;
+            canvas.height = screenHeight;
 
-            constrainDuringPan: true,      // Не даем утащить холст за пределы экрана
-            quickZoomOnClick: false        // Отключаем резкий зум по клику (важно для мобильных)
-        });
+            // Save the default canvas state (no transformations).
+            ctx.save();
+            
+            // Clear the entire canvas.
+            ctx.clearRect(0, 0, screenWidth, screenHeight);
+            
+            // Apply our custom transformations (pan and zoom).
+            ctx.translate(transform.x, transform.y);
+            ctx.scale(transform.scale, transform.scale);
+            
+            // Draw the pre-rendered image data onto the transformed canvas.
+            ctx.drawImage(image.data, 0, 0);
+            
+            // Restore the canvas to its default state for the next frame.
+            ctx.restore();
+        }
 
-        var loader = document.getElementById('loader');
-        var homeBtn = document.getElementById('home-btn');
+        /**
+         * This function is called once after the JSON data is fetched.
+         * It parses the data and draws the initial image onto an offscreen canvas.
+         * @param {object} data - The parsed JSON data from canvas.json.
+         */
+        function initializeImage(data) {
+            const frame = data.frames[0]; // We only use the first frame.
+            image.width = data.width;
+            image.height = data.height;
 
-        viewer.addHandler('open', function() {
+            // Create an in-memory canvas to hold the original, unscaled image.
+            // This is a major performance optimization. We only do this once.
+            const offscreenCanvas = document.createElement('canvas');
+            offscreenCanvas.width = image.width;
+            offscreenCanvas.height = image.height;
+            const offscreenCtx = offscreenCanvas.getContext('2d');
+
+            // Create an ImageData object from the raw pixel array.
+            const imageData = new ImageData(new Uint8ClampedArray(frame.pixels), image.width, image.height);
+            
+            // Draw the pixel data to our in-memory canvas.
+            offscreenCtx.putImageData(imageData, 0, 0);
+            
+            // Store the reference to this pre-rendered canvas.
+            image.data = offscreenCanvas;
+
+            // Hide the loader and start the render loop.
             loader.style.display = 'none';
+            requestAnimationFrame(render);
+        }
 
-            homeBtn.addEventListener('click', function() {
-                viewer.viewport.goHome(false); // Возвращаем вид в начало без анимации
+        // --- DATA FETCHING ---
+        // Fetch the canvas data from the JSON file.
+        fetch('canvas.json')
+            .then(response => {
+                // Check if the request was successful.
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(initializeImage) // If successful, initialize the image.
+            .catch(error => {
+                // If there's an error, display it to the user.
+                loader.textContent = "Error loading data. Check console.";
+                console.error('Error fetching or parsing canvas data:', error);
             });
+
+        // --- USER INPUT HANDLERS ---
+        const container = document.getElementById('canvas-container');
+
+        // --- Panning (Mouse) ---
+        container.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            container.style.cursor = 'grabbing';
+            lastPos = { x: e.clientX, y: e.clientY };
         });
+
+        container.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - lastPos.x;
+            const dy = e.clientY - lastPos.y;
+            transform.x += dx;
+            transform.y += dy;
+            lastPos = { x: e.clientX, y: e.clientY };
+            // Request a new frame to be drawn with the updated position.
+            requestAnimationFrame(render);
+        });
+
+        container.addEventListener('mouseup', () => {
+            isDragging = false;
+            container.style.cursor = 'grab';
+        });
+
+        container.addEventListener('mouseleave', () => {
+            isDragging = false;
+            container.style.cursor = 'grab';
+        });
+
+        // --- Zooming (Mouse Wheel) ---
+        container.addEventListener('wheel', (e) => {
+            // Prevent the page from scrolling.
+            e.preventDefault();
+
+            const scaleAmount = 1.1;
+            const oldScale = transform.scale;
+            
+            // Determine zoom direction.
+            if (e.deltaY < 0) {
+                transform.scale *= scaleAmount;
+            } else {
+                transform.scale /= scaleAmount;
+            }
+            
+            // Apply zoom limits.
+            transform.scale = Math.max(0.1, Math.min(transform.scale, 50));
+
+            // --- Zoom towards the mouse cursor ---
+            // Get mouse position relative to the container.
+            const mouseX = e.clientX - container.offsetLeft;
+            const mouseY = e.clientY - container.offsetTop;
+            
+            // Calculate the new pan position to keep the point under the cursor stationary.
+            transform.x = mouseX - (mouseX - transform.x) * (transform.scale / oldScale);
+            transform.y = mouseY - (mouseY - transform.y) * (transform.scale / oldScale);
+
+            // Request a new frame to be drawn with the updated zoom and position.
+            requestAnimationFrame(render);
+        });
+        
+        // Redraw the canvas if the window is resized.
+        window.addEventListener('resize', () => requestAnimationFrame(render));
     </script>
 </body>
 </html>
