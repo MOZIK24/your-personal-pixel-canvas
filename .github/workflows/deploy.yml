@@ -19,7 +19,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libvips-tools
 
       - name: Generate DZI tiles
-        run: vips dzsave source/canvas.png public --layout dzi --suffix .jpeg[Q=90]
+        run: vips dzsave source/canvas.png public --layout dz --suffix .jpeg[Q=90]
 
       - name: Copy index.html to public directory
         run: cp index.html public/index.html
