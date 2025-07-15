@@ -18,11 +18,14 @@ jobs:
       - name: Install VIPS
         run: sudo apt-get update && sudo apt-get install -y libvips-tools
 
-      - name: Generate DZI tiles
-        run: vips dzsave source/canvas.png public --layout dz --suffix .jpeg[Q=90]
+      - name: Create public directory
+        run: mkdir public
 
-      - name: Copy index.html to public directory
-        run: cp index.html public/index.html
+      - name: Generate DZI tiles into public directory
+        run: vips dzsave source/canvas.png public/canvas --layout dz --suffix .jpeg[Q=90]
+
+      - name: Copy index.html into public directory
+        run: cp index.html public/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
