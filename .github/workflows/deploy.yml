@@ -34,9 +34,9 @@ jobs:
           node-version: '18'
 
       # Step 3: Install the NEW, more reliable Aseprite parser library.
-      # We are switching from 'aseprite-parser' to 'ase-parser'.
+      # We are switching to 'aseprite-reader'.
       - name: Install Aseprite parser
-        run: npm install ase-parser
+        run: npm install aseprite-reader
 
       # Step 4: Run our custom conversion script.
       # The script itself will use this new library.
