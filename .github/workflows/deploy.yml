@@ -34,8 +34,7 @@ jobs:
           node-version: '18'
 
       # Step 3: Install the Aseprite utility LOCALLY.
-      # We remove the '-g' flag. This installs the package into a local 'node_modules' directory.
-      # This is the standard and most reliable way to handle dependencies.
+      # This creates a local 'node_modules' directory with the tool inside.
       - name: Install Aseprite utility (ase-util)
         run: npm install ase-util
 
@@ -43,23 +42,15 @@ jobs:
       - name: Create public directory
         run: mkdir public
 
-      # Step 5: Convert the Aseprite file to JSON using npx.
-      # Now that the package is installed locally, npx will correctly find and run it
-      # from the local 'node_modules/.bin' directory.
+      # Step 5: Convert the Aseprite file to JSON using a direct path.
+      # Instead of relying on npx, we call the executable directly from where npm installed it.
+      # This is the most reliable method and bypasses any path resolution issues.
       - name: Convert Aseprite to JSON
-        run: npx ase-util export --output-dir public --data-filename canvas.json source/canvas.aseprite
+        run: ./node_modules/.bin/ase-util export --output-dir public --data-filename canvas.json source/canvas.aseprite
 
       # Step 6: Copy the main HTML file to the public directory.
       - name: Copy index.html into public directory
         run: cp index.html public/
-
-      # Step 7: Deploy the contents of the 'public' directory to GitHub Pages.
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./public
-          force_orphan: true
 
       # Step 7: Deploy the contents of the 'public' directory to GitHub Pages.
       - name: Deploy to GitHub Pages
