@@ -8,11 +8,11 @@ This project works like a "smart map": it slices your huge canvas into thousands
 
 ## 🚀 Your Dashboard
 
-Here, you can monitor your website's status and find the link to it.
+Here, you can monitor your website's status and find the link to it. **After setting up, please edit this file and replace the placeholders below with your details!**
 
 | Build Status | Your Website URL |
 | :---: | :---: |
-| [![Build Status](https://github.com/${{ github.repository }}/actions/workflows/deploy.yml/badge.svg)](https://github.com/${{ github.repository }}/actions) | **[https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/)** |
+| [![Build Status](https://github.com/[YOUR_USERNAME]/[YOUR_REPOSITORY_NAME]/actions/workflows/deploy.yml/badge.svg)](https://github.com/[YOUR_USERNAME]/[YOUR_REPOSITORY_NAME]/actions) | **[https://[YOUR_USERNAME].github.io/[YOUR_REPOSITORY_NAME]/](https://[YOUR_USERNAME].github.io/[YOUR_REPOSITORY_NAME]/)** |
 
 * **Green checkmark ✅** means your canvas has been successfully processed and published.
 * **Yellow circle 🟡** means the robot is currently working. Please wait 2-3 minutes.
@@ -24,7 +24,9 @@ Here, you can monitor your website's status and find the link to it.
 
 Your entire workflow is just **one simple action**: uploading your Aseprite project file.
 
-[➡️ Click Here to Upload Your File](https://github.com/${{ github.repository }}/upload/main/source)
+### ➡️ Link to Upload Your File https://github.com/[YOUR_USERNAME]/[YOUR_REPOSITORY_NAME]/upload/main/source
+
+**(Remember to edit the link with your details first!)**
 
 **Simple Instructions:**
 
@@ -38,7 +40,7 @@ Your entire workflow is just **one simple action**: uploading your Aseprite proj
 
 ## 🛠️ Getting Started: One-Time Setup
 
-If you are using this template for the first time, you need to follow three simple steps to get everything working.
+If you are using this template for the first time, you need to follow these steps to get everything working.
 
 ### Step 1: Create a GitHub Account
 
@@ -54,7 +56,12 @@ If you don't have an account yet, it only takes a minute.
 * Make sure the repository is set to **Public**.
 * Click **"Create repository"**. Done! You now have a personal copy of this tool.
 
-### Step 3: Enable Your Website
+### Step 3: Edit the LINKS (Important!)
+
+* Replace all instances of `[YOUR_USERNAME]` with your GitHub username.
+* Replace all instances of `[YOUR_REPOSITORY_NAME]` with the name you chose for your repository.
+
+### Step 4: Enable Your Website
 
 You only need to do this once.
 
@@ -63,11 +70,13 @@ You only need to do this once.
 3.  Under the "Source" section, select **`gh-pages`** from the dropdown menu and click **Save**.
 4.  Wait a couple of minutes. The page will refresh, and a green banner with your site's link will appear at the top.
 
-**Congratulations, your site is ready!** You can now update it by following the instructions in the "How to Update Your Canvas" section.
+**Congratulations, your site is ready!**
 
-### 👥 Authors
+---
+
+## 👥 Authors
+
 This project was brought to life through the collaboration of:
 
-mozik24 - Idea and testing.
-
-Gemini (Google AI) - Code and automation.
+* **[mozik24](https://github.com/mozik24)** - Idea and testing.
+* **Gemini (Google AI)** - Code and automation.
