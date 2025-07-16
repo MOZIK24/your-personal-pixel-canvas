@@ -4,8 +4,8 @@
 const fs = require('fs');
 const path = require('path');
 
-// --- FIX: Import the NEW, more reliable Aseprite parser library. ---
-const AsepriteReader = require('aseprite-reader');
+// Import the Aseprite parser library.
+const Aseprite = require('ase-parser');
 
 // Define the paths for our input and output files.
 const sourcePath = path.join(process.cwd(), 'source', 'canvas.aseprite');
@@ -17,30 +17,35 @@ try {
     console.log(`Reading file from: ${sourcePath}`);
     const buffer = fs.readFileSync(sourcePath);
 
-    // --- Step 2: Parse the file data using the new library's API ---
+    // --- Step 2: Parse the file data ---
     console.log('Parsing Aseprite data...');
-    // This library has a different API. We create a 'reader' instance...
-    const reader = new AsepriteReader(buffer);
-    // ...and then explicitly call the 'read' method.
-    reader.read();
-    // Finally, we get the parsed data object.
-    const ase = reader.getAse();
+    const ase = new Aseprite(buffer);
+    ase.parse();
     
     // --- Step 3: Check for valid data ---
     if (!ase.frames || ase.frames.length === 0) {
         throw new Error('No frames found in the Aseprite file.');
     }
+    
+    // --- DEBUGGING STEP: Print the structure of the parsed data ---
+    // This will show us exactly what properties are available in the 'ase' and 'frame' objects.
+    console.log('--- DEBUG: Parsed Aseprite Object Keys ---');
+    console.log(Object.keys(ase)); // Prints all top-level properties of the 'ase' object.
+    
+    const frame = ase.frames[0];
+    console.log('--- DEBUG: First Frame Object Keys ---');
+    console.log(Object.keys(frame)); // Prints all properties of the first frame.
+    // --- END DEBUGGING STEP ---
 
     // --- Step 4: Format the data for our application ---
     console.log('Formatting data for output...');
-    const frame = ase.frames[0];
     const outputData = {
         width: ase.width,
         height: ase.height,
         frames: [
             {
-                // This library provides the pixel data in the 'pixels' property.
-                pixels: Array.from(frame.pixels)
+                // We are trying to access the pixel data here. The debug logs will tell us the correct property name.
+                pixels: Array.from(frame.rawImageData)
             }
         ]
     };
