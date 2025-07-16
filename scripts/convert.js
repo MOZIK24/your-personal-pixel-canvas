@@ -26,26 +26,24 @@ try {
     if (!ase.frames || ase.frames.length === 0) {
         throw new Error('No frames found in the Aseprite file.');
     }
-    
-    // --- DEBUGGING STEP: Print the structure of the parsed data ---
-    // This will show us exactly what properties are available in the 'ase' and 'frame' objects.
-    console.log('--- DEBUG: Parsed Aseprite Object Keys ---');
-    console.log(Object.keys(ase)); // Prints all top-level properties of the 'ase' object.
-    
-    const frame = ase.frames[0];
-    console.log('--- DEBUG: First Frame Object Keys ---');
-    console.log(Object.keys(frame)); // Prints all properties of the first frame.
-    // --- END DEBUGGING STEP ---
 
     // --- Step 4: Format the data for our application ---
     console.log('Formatting data for output...');
+    const frame = ase.frames[0];
+
+    // --- FINAL FIX: Access the correct pixel data property ---
+    // The library stores the final rendered image data for a frame in the 'imageData' property.
+    // This is a Buffer containing the RGBA values for every pixel.
+    if (!frame.imageData) {
+        throw new Error("Could not find 'imageData' property in the parsed frame. The file might be corrupted or have an unsupported format.");
+    }
+
     const outputData = {
         width: ase.width,
         height: ase.height,
         frames: [
             {
-                // We are trying to access the pixel data here. The debug logs will tell us the correct property name.
-                pixels: Array.from(frame.rawImageData)
+                pixels: Array.from(frame.imageData)
             }
         ]
     };
