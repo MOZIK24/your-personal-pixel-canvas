@@ -4,9 +4,8 @@
 const fs = require('fs');
 const path = require('path');
 
-// --- FIX ---
-// Import the NEW, more reliable Aseprite parser library.
-const parseAse = require('ase-parser');
+// Import the Aseprite parser library.
+const Aseprite = require('ase-parser');
 
 // Define the paths for our input and output files.
 const sourcePath = path.join(process.cwd(), 'source', 'canvas.aseprite');
@@ -19,8 +18,11 @@ try {
     const buffer = fs.readFileSync(sourcePath);
 
     // --- Step 2: Parse the file data using the new library ---
+    // --- FIX: The parser is a class, so we must instantiate it with 'new'. ---
     console.log('Parsing Aseprite data...');
-    const ase = parseAse(buffer);
+    const ase = new Aseprite(buffer);
+    // The library requires an explicit parse call after instantiation.
+    ase.parse();
     
     // --- Step 3: Check for valid data ---
     if (!ase.frames || ase.frames.length === 0) {
