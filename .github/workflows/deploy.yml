@@ -33,14 +33,13 @@ jobs:
         with:
           node-version: '18'
 
-      # Step 3: Install the Aseprite parser library LOCALLY.
-      # We are now installing a library, not a command-line tool.
+      # Step 3: Install the NEW, more reliable Aseprite parser library.
+      # We are switching from 'aseprite-parser' to 'ase-parser'.
       - name: Install Aseprite parser
-        run: npm install aseprite-parser
+        run: npm install ase-parser
 
       # Step 4: Run our custom conversion script.
-      # We now execute our own Node.js script to perform the conversion.
-      # This is the most reliable method.
+      # The script itself will use this new library.
       - name: Convert Aseprite to JSON
         run: node scripts/convert.js
 
