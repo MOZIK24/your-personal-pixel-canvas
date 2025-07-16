@@ -9,8 +9,8 @@ on:
     paths:
       - 'source/canvas.aseprite'
       - 'index.html'
-      # Also trigger on changes to our conversion script
-      - 'scripts/convert.js' 
+      # Trigger on changes to our new tiling script
+      - 'scripts/tile.js' 
 
   workflow_dispatch:
 
@@ -34,13 +34,12 @@ jobs:
           node-version: '18'
 
       # Step 3: Install the 'ase-parser' library.
-      # We are returning to this library as it installs correctly.
       - name: Install Aseprite parser
         run: npm install ase-parser
 
-      # Step 4: Run our custom conversion script.
-      - name: Convert Aseprite to JSON
-        run: node scripts/convert.js
+      # Step 4: Run our custom tiling script.
+      - name: Convert Aseprite to Data Tiles
+        run: node scripts/tile.js
 
       # Step 5: Copy the main HTML file to the public directory.
       - name: Copy index.html into public directory
