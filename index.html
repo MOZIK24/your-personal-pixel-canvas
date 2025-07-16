@@ -24,6 +24,35 @@
             background: #1d1f21; display: flex; justify-content: center;
             align-items: center; color: white; font-size: 24px; z-index: 100;
         }
+        /* --- NEW UI STYLES --- */
+        #info-panel {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            z-index: 50;
+            transition: opacity 0.3s;
+        }
+        #toggle-info {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 30px;
+            height: 30px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: 1px solid #555;
+            border-radius: 50%;
+            font-size: 20px;
+            line-height: 28px;
+            text-align: center;
+            cursor: pointer;
+            z-index: 50;
+        }
     </style>
 </head>
 <body>
@@ -31,6 +60,13 @@
     <div id="canvas-container">
         <canvas id="pixel-canvas"></canvas>
     </div>
+    
+    <!-- NEW UI ELEMENTS -->
+    <div id="info-panel">
+        <span id="canvas-size"></span>
+    </div>
+    <div id="toggle-info">i</div>
+
 
     <script>
         // --- SETUP ---
@@ -38,6 +74,10 @@
         const ctx = canvas.getContext('2d', { alpha: false });
         const loader = document.getElementById('loader');
         const container = document.getElementById('canvas-container');
+        // NEW UI ELEMENT REFERENCES
+        const infoPanel = document.getElementById('info-panel');
+        const canvasSizeSpan = document.getElementById('canvas-size');
+        const toggleInfoBtn = document.getElementById('toggle-info');
 
         // --- STATE ---
         let transform = { x: 0, y: 0, scale: 1 };
@@ -47,8 +87,8 @@
         let touch = { lastDist: 0, isPinching: false };
         
         // --- TILE MANAGEMENT ---
-        const tileCache = {}; // Stores loaded tile canvases
-        const loadingTiles = new Set(); // Stores IDs of tiles currently being fetched
+        const tileCache = {};
+        const loadingTiles = new Set();
 
         // --- CORE RENDER LOGIC ---
         function render() {
@@ -58,7 +98,7 @@
             ctx.fillStyle = '#1d1f21';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            if (!imageInfo.tileSize) return; // Don't render if manifest isn't loaded
+            if (!imageInfo.tileSize) return;
 
             const { tileSize } = imageInfo;
             const view = {
@@ -103,7 +143,7 @@
             try {
                 loadingTiles.add(tileId);
                 const response = await fetch(`tiles/tile_${row}_${col}.bin`);
-                if (!response.ok) throw new Error(`Tile not found: ${tileId}`);
+                if (!response.ok) return; // Fail silently if tile not found
                 
                 const pixelBuffer = await response.arrayBuffer();
                 const imageData = new ImageData(new Uint8ClampedArray(pixelBuffer), imageInfo.tileSize, imageInfo.tileSize);
@@ -131,6 +171,9 @@
                 if (!metaResponse.ok) throw new Error(`HTTP error! status: ${metaResponse.status}`);
                 imageInfo = await metaResponse.json();
 
+                // --- NEW: Update UI with info ---
+                canvasSizeSpan.textContent = `${imageInfo.width} x ${imageInfo.height} px`;
+
                 centerAndFitImage();
                 loader.style.display = 'none';
                 requestAnimationFrame(render);
@@ -150,78 +193,29 @@
         }
 
         // --- USER INPUT HANDLERS (MOUSE & TOUCH) ---
-        function handlePanStart(x, y) {
-            isDragging = true;
-            container.style.cursor = 'grabbing';
-            lastPos = { x, y };
-        }
-        function handlePanMove(x, y) {
-            if (!isDragging) return;
-            const dx = x - lastPos.x;
-            const dy = y - lastPos.y;
-            transform.x += dx;
-            transform.y += dy;
-            lastPos = { x, y };
-            requestAnimationFrame(render);
-        }
-        function handlePanEnd() {
-            isDragging = false;
-            container.style.cursor = 'grab';
-        }
-        function handleZoom(scaleAmount, centerX, centerY) {
-            const oldScale = transform.scale;
-            transform.scale *= scaleAmount;
-            transform.scale = Math.max(0.02, Math.min(transform.scale, 100));
-            transform.x = centerX - (centerX - transform.x) * (transform.scale / oldScale);
-            transform.y = centerY - (centerY - transform.y) * (transform.scale / oldScale);
-            requestAnimationFrame(render);
-        }
+        function handlePanStart(x, y) { isDragging = true; container.style.cursor = 'grabbing'; lastPos = { x, y }; }
+        function handlePanMove(x, y) { if (!isDragging) return; const dx = x - lastPos.x; const dy = y - lastPos.y; transform.x += dx; transform.y += dy; lastPos = { x, y }; requestAnimationFrame(render); }
+        function handlePanEnd() { isDragging = false; container.style.cursor = 'grab'; }
+        function handleZoom(scaleAmount, centerX, centerY) { const oldScale = transform.scale; transform.scale *= scaleAmount; transform.scale = Math.max(0.02, Math.min(transform.scale, 100)); transform.x = centerX - (centerX - transform.x) * (transform.scale / oldScale); transform.y = centerY - (centerY - transform.y) * (transform.scale / oldScale); requestAnimationFrame(render); }
 
-        // Mouse
         container.addEventListener('mousedown', (e) => handlePanStart(e.clientX, e.clientY));
         container.addEventListener('mousemove', (e) => handlePanMove(e.clientX, e.clientY));
         container.addEventListener('mouseup', handlePanEnd);
         container.addEventListener('mouseleave', handlePanEnd);
-        container.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const scaleAmount = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-            handleZoom(scaleAmount, e.clientX, e.clientY);
+        container.addEventListener('wheel', (e) => { e.preventDefault(); const scaleAmount = e.deltaY < 0 ? 1.1 : 1 / 1.1; handleZoom(scaleAmount, e.clientX, e.clientY); });
+        container.addEventListener('touchstart', (e) => { if (e.touches.length === 1) { handlePanStart(e.touches[0].clientX, e.touches[0].clientY); } else if (e.touches.length === 2) { isDragging = false; touch.isPinching = true; touch.lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); } });
+        container.addEventListener('touchmove', (e) => { e.preventDefault(); if (e.touches.length === 1 && isDragging) { handlePanMove(e.touches[0].clientX, e.touches[0].clientY); } else if (e.touches.length === 2 && touch.isPinching) { const newDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); const scaleAmount = newDist / touch.lastDist; const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2; const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2; handleZoom(scaleAmount, centerX, centerY); touch.lastDist = newDist; } });
+        container.addEventListener('touchend', (e) => { if (e.touches.length < 2) touch.isPinching = false; if (e.touches.length < 1) handlePanEnd(); });
+        
+        // --- NEW: Toggle info panel visibility ---
+        toggleInfoBtn.addEventListener('click', () => {
+            const isVisible = infoPanel.style.opacity !== '0';
+            infoPanel.style.opacity = isVisible ? '0' : '1';
         });
 
-        // Touch
-        container.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 1) {
-                handlePanStart(e.touches[0].clientX, e.touches[0].clientY);
-            } else if (e.touches.length === 2) {
-                isDragging = false;
-                touch.isPinching = true;
-                touch.lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-            }
-        });
-        container.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            if (e.touches.length === 1 && isDragging) {
-                handlePanMove(e.touches[0].clientX, e.touches[0].clientY);
-            } else if (e.touches.length === 2 && touch.isPinching) {
-                const newDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-                const scaleAmount = newDist / touch.lastDist;
-                const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-                handleZoom(scaleAmount, centerX, centerY);
-                touch.lastDist = newDist;
-            }
-        });
-        container.addEventListener('touchend', (e) => {
-            if (e.touches.length < 2) touch.isPinching = false;
-            if (e.touches.length < 1) handlePanEnd();
-        });
-        
         // --- START ---
         initialize();
-        window.addEventListener('resize', () => {
-            centerAndFitImage();
-            requestAnimationFrame(render);
-        });
+        window.addEventListener('resize', () => { centerAndFitImage(); requestAnimationFrame(render); });
     </script>
 </body>
 </html>
