@@ -18,10 +18,8 @@ try {
     const buffer = fs.readFileSync(sourcePath);
 
     // --- Step 2: Parse the file data using the new library ---
-    // --- FIX: The parser is a class, so we must instantiate it with 'new'. ---
     console.log('Parsing Aseprite data...');
     const ase = new Aseprite(buffer);
-    // The library requires an explicit parse call after instantiation.
     ase.parse();
     
     // --- Step 3: Check for valid data ---
@@ -37,9 +35,8 @@ try {
         height: ase.height,
         frames: [
             {
-                // The 'pixels' property from this library is a Buffer.
-                // We convert it to a regular Array for JSON serialization.
-                pixels: Array.from(frame.pixels)
+                // --- FIX: The correct property for pixel data in this library is 'rawImageData', not 'pixels'. ---
+                pixels: Array.from(frame.rawImageData)
             }
         ]
     };
