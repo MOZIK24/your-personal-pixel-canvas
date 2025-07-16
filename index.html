@@ -2,30 +2,32 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <title>Pixel Canvas</title>
     <style>
         body, html {
             margin: 0; padding: 0; width: 100%; height: 100%;
-            overflow: hidden; background-color: #2c2c2c; font-family: sans-serif;
+            overflow: hidden; background-color: #1d1f21; font-family: sans-serif;
+            touch-action: none; /* Prevents default browser touch behaviors like pull-to-refresh */
         }
-        #canvas-container { width: 100%; height: 100%; cursor: grab; }
+        #canvas-container { width: 100%; height: 100%; cursor: grab; position: relative; }
         canvas {
             image-rendering: pixelated;
             image-rendering: -moz-crisp-edges;
             image-rendering: crisp-edges;
-            /* The canvas will be positioned by JavaScript */
             position: absolute;
+            top: 0;
+            left: 0;
         }
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #2c2c2c; display: flex; justify-content: center;
+            background: #1d1f21; display: flex; justify-content: center;
             align-items: center; color: white; font-size: 24px; z-index: 100;
         }
     </style>
 </head>
 <body>
-    <div id="loader">Loading canvas...</div>
+    <div id="loader">Loading...</div>
     <div id="canvas-container">
         <canvas id="pixel-canvas"></canvas>
     </div>
@@ -39,59 +41,96 @@
 
         // --- STATE ---
         let transform = { x: 0, y: 0, scale: 1 };
-        let imageInfo = { width: 0, height: 0 };
+        let imageInfo = { width: 0, height: 0, tileSize: 0 };
         let isDragging = false;
         let lastPos = { x: 0, y: 0 };
         let touch = { lastDist: 0, isPinching: false };
+        
+        // --- TILE MANAGEMENT ---
+        const tileCache = {}; // Stores loaded tile canvases
+        const loadingTiles = new Set(); // Stores IDs of tiles currently being fetched
 
         // --- CORE RENDER LOGIC ---
         function render() {
-            // Set canvas size to match the container, for sharp rendering
             canvas.width = container.clientWidth;
             canvas.height = container.clientHeight;
+            
+            ctx.fillStyle = '#1d1f21';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Clear the entire visible canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (!imageInfo.tileSize) return; // Don't render if manifest isn't loaded
 
-            // Apply transformations (pan and zoom)
+            const { tileSize } = imageInfo;
+            const view = {
+                x: -transform.x / transform.scale,
+                y: -transform.y / transform.scale,
+                w: canvas.width / transform.scale,
+                h: canvas.height / transform.scale
+            };
+
+            const startCol = Math.floor(view.x / tileSize);
+            const endCol = Math.ceil((view.x + view.w) / tileSize);
+            const startRow = Math.floor(view.y / tileSize);
+            const endRow = Math.ceil((view.y + view.h) / tileSize);
+
             ctx.save();
             ctx.translate(transform.x, transform.y);
             ctx.scale(transform.scale, transform.scale);
             
-            // Draw the pre-rendered image from the offscreen canvas
-            ctx.drawImage(offscreenCanvas, 0, 0);
-            
+            for (let row = startRow; row < endRow; row++) {
+                for (let col = startCol; col < endCol; col++) {
+                    const tileX = col * tileSize;
+                    const tileY = row * tileSize;
+                    
+                    if (tileX >= imageInfo.width || tileY >= imageInfo.height) continue;
+
+                    const tileId = `${tileY}_${tileX}`;
+                    
+                    if (tileCache[tileId]) {
+                        ctx.drawImage(tileCache[tileId], tileX, tileY);
+                    } else {
+                        loadTile(tileY, tileX);
+                    }
+                }
+            }
             ctx.restore();
         }
 
-        // --- DATA FETCHING AND INITIALIZATION ---
-        let offscreenCanvas; // This will hold our full, unscaled image
+        async function loadTile(row, col) {
+            const tileId = `${row}_${col}`;
+            if (loadingTiles.has(tileId)) return;
 
+            try {
+                loadingTiles.add(tileId);
+                const response = await fetch(`tiles/tile_${row}_${col}.bin`);
+                if (!response.ok) throw new Error(`Tile not found: ${tileId}`);
+                
+                const pixelBuffer = await response.arrayBuffer();
+                const imageData = new ImageData(new Uint8ClampedArray(pixelBuffer), imageInfo.tileSize, imageInfo.tileSize);
+                
+                const tileCanvas = document.createElement('canvas');
+                tileCanvas.width = imageInfo.tileSize;
+                tileCanvas.height = imageInfo.tileSize;
+                tileCanvas.getContext('2d').putImageData(imageData, 0, 0);
+
+                tileCache[tileId] = tileCanvas;
+                requestAnimationFrame(render);
+
+            } catch (error) {
+                console.error(`Failed to load tile ${tileId}:`, error);
+            } finally {
+                loadingTiles.delete(tileId);
+            }
+        }
+
+        // --- INITIALIZATION ---
         async function initialize() {
             try {
-                // Step 1: Fetch the small metadata file
-                loader.textContent = 'Loading metadata...';
-                const metaResponse = await fetch('canvas.json');
+                loader.textContent = 'Loading manifest...';
+                const metaResponse = await fetch('manifest.json');
                 if (!metaResponse.ok) throw new Error(`HTTP error! status: ${metaResponse.status}`);
                 imageInfo = await metaResponse.json();
 
-                // Step 2: Fetch the large binary pixel data file
-                loader.textContent = 'Loading pixel data...';
-                const pixelResponse = await fetch('canvas.bin');
-                if (!pixelResponse.ok) throw new Error(`HTTP error! status: ${pixelResponse.status}`);
-                const pixelBuffer = await pixelResponse.arrayBuffer();
-
-                // Step 3: Create and draw to an offscreen canvas
-                loader.textContent = 'Preparing image...';
-                offscreenCanvas = document.createElement('canvas');
-                offscreenCanvas.width = imageInfo.width;
-                offscreenCanvas.height = imageInfo.height;
-                const offscreenCtx = offscreenCanvas.getContext('2d');
-                
-                const imageData = new ImageData(new Uint8ClampedArray(pixelBuffer), imageInfo.width, imageInfo.height);
-                offscreenCtx.putImageData(imageData, 0, 0);
-
-                // Step 4: Initial setup and first render
                 centerAndFitImage();
                 loader.style.display = 'none';
                 requestAnimationFrame(render);
@@ -102,104 +141,79 @@
             }
         }
         
-        // --- UTILITY FUNCTIONS ---
         function centerAndFitImage() {
             const scaleX = container.clientWidth / imageInfo.width;
             const scaleY = container.clientHeight / imageInfo.height;
-            transform.scale = Math.min(scaleX, scaleY) * 0.9; // Fit with a 10% margin
-
+            transform.scale = Math.min(scaleX, scaleY) * 0.9;
             transform.x = (container.clientWidth - (imageInfo.width * transform.scale)) / 2;
             transform.y = (container.clientHeight - (imageInfo.height * transform.scale)) / 2;
         }
 
-        function getTouchDistance(e) {
-            const dx = e.touches[0].clientX - e.touches[1].clientX;
-            const dy = e.touches[0].clientY - e.touches[1].clientY;
-            return Math.sqrt(dx * dx + dy * dy);
-        }
-
-        // --- USER INPUT HANDLERS ---
-        // Mouse Panning
-        container.addEventListener('mousedown', (e) => {
+        // --- USER INPUT HANDLERS (MOUSE & TOUCH) ---
+        function handlePanStart(x, y) {
             isDragging = true;
             container.style.cursor = 'grabbing';
-            lastPos = { x: e.clientX, y: e.clientY };
-        });
-        container.addEventListener('mousemove', (e) => {
+            lastPos = { x, y };
+        }
+        function handlePanMove(x, y) {
             if (!isDragging) return;
-            const dx = e.clientX - lastPos.x;
-            const dy = e.clientY - lastPos.y;
+            const dx = x - lastPos.x;
+            const dy = y - lastPos.y;
             transform.x += dx;
             transform.y += dy;
-            lastPos = { x: e.clientX, y: e.clientY };
+            lastPos = { x, y };
             requestAnimationFrame(render);
-        });
-        container.addEventListener('mouseup', () => { isDragging = false; container.style.cursor = 'grab'; });
-        container.addEventListener('mouseleave', () => { isDragging = false; container.style.cursor = 'grab'; });
+        }
+        function handlePanEnd() {
+            isDragging = false;
+            container.style.cursor = 'grab';
+        }
+        function handleZoom(scaleAmount, centerX, centerY) {
+            const oldScale = transform.scale;
+            transform.scale *= scaleAmount;
+            transform.scale = Math.max(0.02, Math.min(transform.scale, 100));
+            transform.x = centerX - (centerX - transform.x) * (transform.scale / oldScale);
+            transform.y = centerY - (centerY - transform.y) * (transform.scale / oldScale);
+            requestAnimationFrame(render);
+        }
 
-        // Mouse Wheel Zooming
+        // Mouse
+        container.addEventListener('mousedown', (e) => handlePanStart(e.clientX, e.clientY));
+        container.addEventListener('mousemove', (e) => handlePanMove(e.clientX, e.clientY));
+        container.addEventListener('mouseup', handlePanEnd);
+        container.addEventListener('mouseleave', handlePanEnd);
         container.addEventListener('wheel', (e) => {
             e.preventDefault();
-            const scaleAmount = 1.1;
-            const oldScale = transform.scale;
-            
-            if (e.deltaY < 0) {
-                transform.scale *= scaleAmount;
-            } else {
-                transform.scale /= scaleAmount;
-            }
-            transform.scale = Math.max(0.02, Math.min(transform.scale, 100));
+            const scaleAmount = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+            handleZoom(scaleAmount, e.clientX, e.clientY);
+        });
 
-            const mouseX = e.clientX - container.offsetLeft;
-            const mouseY = e.clientY - container.offsetTop;
-            
-            transform.x = mouseX - (mouseX - transform.x) * (transform.scale / oldScale);
-            transform.y = mouseY - (mouseY - transform.y) * (transform.scale / oldScale);
-
-            requestAnimationFrame(render);
-});
-
-        // Touch Panning and Pinch-to-Zoom
+        // Touch
         container.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
-                isDragging = true;
-                container.style.cursor = 'grabbing';
-                lastPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                handlePanStart(e.touches[0].clientX, e.touches[0].clientY);
             } else if (e.touches.length === 2) {
                 isDragging = false;
                 touch.isPinching = true;
-                touch.lastDist = getTouchDistance(e);
+                touch.lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
             }
         });
         container.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            if (isDragging && e.touches.length === 1) {
-                const dx = e.touches[0].clientX - lastPos.x;
-                const dy = e.touches[0].clientY - lastPos.y;
-                transform.x += dx;
-                transform.y += dy;
-                lastPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                requestAnimationFrame(render);
-            } else if (touch.isPinching && e.touches.length === 2) {
-                const newDist = getTouchDistance(e);
+            if (e.touches.length === 1 && isDragging) {
+                handlePanMove(e.touches[0].clientX, e.touches[0].clientY);
+            } else if (e.touches.length === 2 && touch.isPinching) {
+                const newDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
                 const scaleAmount = newDist / touch.lastDist;
-                const oldScale = transform.scale;
-                transform.scale *= scaleAmount;
-                transform.scale = Math.max(0.02, Math.min(transform.scale, 100));
-                
                 const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-
-                transform.x = centerX - (centerX - transform.x) * (transform.scale / oldScale);
-                transform.y = centerY - (centerY - transform.y) * (transform.scale / oldScale);
-
+                handleZoom(scaleAmount, centerX, centerY);
                 touch.lastDist = newDist;
-                requestAnimationFrame(render);
             }
         });
         container.addEventListener('touchend', (e) => {
             if (e.touches.length < 2) touch.isPinching = false;
-            if (e.touches.length < 1) isDragging = false;
+            if (e.touches.length < 1) handlePanEnd();
         });
         
         // --- START ---
