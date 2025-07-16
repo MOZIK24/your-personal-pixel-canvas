@@ -2,175 +2,129 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- This meta tag is crucial for mobile devices. It sets the viewport to the device's width and disables user scaling, which we handle ourselves. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Pixel Canvas</title>
     <style>
-        /* Basic reset to remove default browser margins and paddings. */
         body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            /* Prevents scrollbars from appearing on the main page. */
-            overflow: hidden;
-            background-color: #2c2c2c;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background-color: #2c2c2c; font-family: sans-serif;
         }
-
-        /* The container for our canvas. It will handle mouse/touch events. */
-        #canvas-container {
-            width: 100%;
-            height: 100%;
-            /* The cursor indicates that the canvas can be grabbed and moved. */
-            cursor: grab;
-        }
-
-        /* The canvas element itself. */
+        #canvas-container { width: 100%; height: 100%; cursor: grab; }
         canvas {
-            /* This is the most important CSS rule for pixel art. */
-            /* It tells the browser not to blur the pixels when scaling up. */
             image-rendering: pixelated;
-            image-rendering: -moz-crisp-edges; /* Firefox fallback */
-            image-rendering: crisp-edges;   /* Older browsers fallback */
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+            /* The canvas will be positioned by JavaScript */
+            position: absolute;
         }
-
-        /* Styles for the loading indicator. */
         #loader {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #2c2c2c;
-            /* Flexbox is used to center the text both horizontally and vertically. */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            font-size: 24px;
-            /* Ensures the loader is on top of everything else. */
-            z-index: 100;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #2c2c2c; display: flex; justify-content: center;
+            align-items: center; color: white; font-size: 24px; z-index: 100;
         }
     </style>
 </head>
 <body>
-    <!-- The loading indicator, visible until the canvas data is loaded and drawn. -->
-    <div id="loader">Loading canvas data...</div>
-
-    <!-- The main container for our canvas. -->
+    <div id="loader">Loading canvas...</div>
     <div id="canvas-container">
         <canvas id="pixel-canvas"></canvas>
     </div>
 
     <script>
         // --- SETUP ---
-        // Get references to the DOM elements we will be working with.
         const canvas = document.getElementById('pixel-canvas');
-        const ctx = canvas.getContext('2d', { alpha: false }); // 'alpha: false' is a performance optimization.
+        const ctx = canvas.getContext('2d', { alpha: false });
         const loader = document.getElementById('loader');
+        const container = document.getElementById('canvas-container');
 
-        // --- STATE MANAGEMENT ---
-        // This object holds the current state of our view: position (pan) and scale (zoom).
+        // --- STATE ---
         let transform = { x: 0, y: 0, scale: 1 };
-        // This object holds the raw image data from the Aseprite file.
-        let image = { data: null, width: 0, height: 0 };
-        // Flags to manage user interaction state.
+        let imageInfo = { width: 0, height: 0 };
         let isDragging = false;
         let lastPos = { x: 0, y: 0 };
+        let touch = { lastDist: 0, isPinching: false };
 
-        // --- CORE DRAWING LOGIC ---
-        /**
-         * The main render loop. This function is called every frame.
-         * It clears the canvas and redraws the image with the current transformations.
-         */
+        // --- CORE RENDER LOGIC ---
         function render() {
-            // We can't render if there's no image data.
-            if (!image.data) return;
+            // Set canvas size to match the container, for sharp rendering
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
 
-            // Get the container's dimensions to fill the screen.
-            const screenWidth = container.clientWidth;
-            const screenHeight = container.clientHeight;
-            
-            // Set the canvas drawing buffer size to match the screen.
-            canvas.width = screenWidth;
-            canvas.height = screenHeight;
+            // Clear the entire visible canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Save the default canvas state (no transformations).
+            // Apply transformations (pan and zoom)
             ctx.save();
-            
-            // Clear the entire canvas.
-            ctx.clearRect(0, 0, screenWidth, screenHeight);
-            
-            // Apply our custom transformations (pan and zoom).
             ctx.translate(transform.x, transform.y);
             ctx.scale(transform.scale, transform.scale);
             
-            // Draw the pre-rendered image data onto the transformed canvas.
-            ctx.drawImage(image.data, 0, 0);
+            // Draw the pre-rendered image from the offscreen canvas
+            ctx.drawImage(offscreenCanvas, 0, 0);
             
-            // Restore the canvas to its default state for the next frame.
             ctx.restore();
         }
 
-        /**
-         * This function is called once after the JSON data is fetched.
-         * It parses the data and draws the initial image onto an offscreen canvas.
-         * @param {object} data - The parsed JSON data from canvas.json.
-         */
-        function initializeImage(data) {
-            const frame = data.frames[0]; // We only use the first frame.
-            image.width = data.width;
-            image.height = data.height;
+        // --- DATA FETCHING AND INITIALIZATION ---
+        let offscreenCanvas; // This will hold our full, unscaled image
 
-            // Create an in-memory canvas to hold the original, unscaled image.
-            // This is a major performance optimization. We only do this once.
-            const offscreenCanvas = document.createElement('canvas');
-            offscreenCanvas.width = image.width;
-            offscreenCanvas.height = image.height;
-            const offscreenCtx = offscreenCanvas.getContext('2d');
+        async function initialize() {
+            try {
+                // Step 1: Fetch the small metadata file
+                loader.textContent = 'Loading metadata...';
+                const metaResponse = await fetch('canvas.json');
+                if (!metaResponse.ok) throw new Error(`HTTP error! status: ${metaResponse.status}`);
+                imageInfo = await metaResponse.json();
 
-            // Create an ImageData object from the raw pixel array.
-            const imageData = new ImageData(new Uint8ClampedArray(frame.pixels), image.width, image.height);
-            
-            // Draw the pixel data to our in-memory canvas.
-            offscreenCtx.putImageData(imageData, 0, 0);
-            
-            // Store the reference to this pre-rendered canvas.
-            image.data = offscreenCanvas;
+                // Step 2: Fetch the large binary pixel data file
+                loader.textContent = 'Loading pixel data...';
+                const pixelResponse = await fetch('canvas.bin');
+                if (!pixelResponse.ok) throw new Error(`HTTP error! status: ${pixelResponse.status}`);
+                const pixelBuffer = await pixelResponse.arrayBuffer();
 
-            // Hide the loader and start the render loop.
-            loader.style.display = 'none';
-            requestAnimationFrame(render);
+                // Step 3: Create and draw to an offscreen canvas
+                loader.textContent = 'Preparing image...';
+                offscreenCanvas = document.createElement('canvas');
+                offscreenCanvas.width = imageInfo.width;
+                offscreenCanvas.height = imageInfo.height;
+                const offscreenCtx = offscreenCanvas.getContext('2d');
+                
+                const imageData = new ImageData(new Uint8ClampedArray(pixelBuffer), imageInfo.width, imageInfo.height);
+                offscreenCtx.putImageData(imageData, 0, 0);
+
+                // Step 4: Initial setup and first render
+                centerAndFitImage();
+                loader.style.display = 'none';
+                requestAnimationFrame(render);
+
+            } catch (error) {
+                loader.textContent = "Error loading canvas. Check console.";
+                console.error('Initialization failed:', error);
+            }
+        }
+        
+        // --- UTILITY FUNCTIONS ---
+        function centerAndFitImage() {
+            const scaleX = container.clientWidth / imageInfo.width;
+            const scaleY = container.clientHeight / imageInfo.height;
+            transform.scale = Math.min(scaleX, scaleY) * 0.9; // Fit with a 10% margin
+
+            transform.x = (container.clientWidth - (imageInfo.width * transform.scale)) / 2;
+            transform.y = (container.clientHeight - (imageInfo.height * transform.scale)) / 2;
         }
 
-        // --- DATA FETCHING ---
-        // Fetch the canvas data from the JSON file.
-        fetch('canvas.json')
-            .then(response => {
-                // Check if the request was successful.
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(initializeImage) // If successful, initialize the image.
-            .catch(error => {
-                // If there's an error, display it to the user.
-                loader.textContent = "Error loading data. Check console.";
-                console.error('Error fetching or parsing canvas data:', error);
-            });
+        function getTouchDistance(e) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
 
         // --- USER INPUT HANDLERS ---
-        const container = document.getElementById('canvas-container');
-
-        // --- Panning (Mouse) ---
+        // Mouse Panning
         container.addEventListener('mousedown', (e) => {
             isDragging = true;
             container.style.cursor = 'grabbing';
             lastPos = { x: e.clientX, y: e.clientY };
         });
-
         container.addEventListener('mousemove', (e) => {
             if (!isDragging) return;
             const dx = e.clientX - lastPos.x;
@@ -178,53 +132,82 @@
             transform.x += dx;
             transform.y += dy;
             lastPos = { x: e.clientX, y: e.clientY };
-            // Request a new frame to be drawn with the updated position.
             requestAnimationFrame(render);
         });
+        container.addEventListener('mouseup', () => { isDragging = false; container.style.cursor = 'grab'; });
+        container.addEventListener('mouseleave', () => { isDragging = false; container.style.cursor = 'grab'; });
 
-        container.addEventListener('mouseup', () => {
-            isDragging = false;
-            container.style.cursor = 'grab';
-        });
-
-        container.addEventListener('mouseleave', () => {
-            isDragging = false;
-            container.style.cursor = 'grab';
-        });
-
-        // --- Zooming (Mouse Wheel) ---
+        // Mouse Wheel Zooming
         container.addEventListener('wheel', (e) => {
-            // Prevent the page from scrolling.
             e.preventDefault();
-
             const scaleAmount = 1.1;
             const oldScale = transform.scale;
             
-            // Determine zoom direction.
             if (e.deltaY < 0) {
                 transform.scale *= scaleAmount;
             } else {
                 transform.scale /= scaleAmount;
             }
-            
-            // Apply zoom limits.
-            transform.scale = Math.max(0.1, Math.min(transform.scale, 50));
+            transform.scale = Math.max(0.02, Math.min(transform.scale, 100));
 
-            // --- Zoom towards the mouse cursor ---
-            // Get mouse position relative to the container.
             const mouseX = e.clientX - container.offsetLeft;
             const mouseY = e.clientY - container.offsetTop;
             
-            // Calculate the new pan position to keep the point under the cursor stationary.
             transform.x = mouseX - (mouseX - transform.x) * (transform.scale / oldScale);
             transform.y = mouseY - (mouseY - transform.y) * (transform.scale / oldScale);
 
-            // Request a new frame to be drawn with the updated zoom and position.
             requestAnimationFrame(render);
+});
+
+        // Touch Panning and Pinch-to-Zoom
+        container.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                container.style.cursor = 'grabbing';
+                lastPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            } else if (e.touches.length === 2) {
+                isDragging = false;
+                touch.isPinching = true;
+                touch.lastDist = getTouchDistance(e);
+            }
+        });
+        container.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (isDragging && e.touches.length === 1) {
+                const dx = e.touches[0].clientX - lastPos.x;
+                const dy = e.touches[0].clientY - lastPos.y;
+                transform.x += dx;
+                transform.y += dy;
+                lastPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                requestAnimationFrame(render);
+            } else if (touch.isPinching && e.touches.length === 2) {
+                const newDist = getTouchDistance(e);
+                const scaleAmount = newDist / touch.lastDist;
+                const oldScale = transform.scale;
+                transform.scale *= scaleAmount;
+                transform.scale = Math.max(0.02, Math.min(transform.scale, 100));
+                
+                const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+                transform.x = centerX - (centerX - transform.x) * (transform.scale / oldScale);
+                transform.y = centerY - (centerY - transform.y) * (transform.scale / oldScale);
+
+                touch.lastDist = newDist;
+                requestAnimationFrame(render);
+            }
+        });
+        container.addEventListener('touchend', (e) => {
+            if (e.touches.length < 2) touch.isPinching = false;
+            if (e.touches.length < 1) isDragging = false;
         });
         
-        // Redraw the canvas if the window is resized.
-        window.addEventListener('resize', () => requestAnimationFrame(render));
+        // --- START ---
+        initialize();
+        window.addEventListener('resize', () => {
+            centerAndFitImage();
+            requestAnimationFrame(render);
+        });
     </script>
 </body>
 </html>
