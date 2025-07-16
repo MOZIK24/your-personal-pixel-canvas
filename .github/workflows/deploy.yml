@@ -2,7 +2,6 @@
 name: Deploy Canvas to GitHub Pages
 
 # --- Triggers ---
-# This section defines when the workflow should automatically run.
 on:
   push:
     branches:
@@ -10,8 +9,9 @@ on:
     paths:
       - 'source/canvas.aseprite'
       - 'index.html'
-  
-  # This allows you to manually trigger the workflow from the "Actions" tab.
+      # Also trigger on changes to our conversion script
+      - 'scripts/convert.js' 
+
   workflow_dispatch:
 
 # --- Jobs ---
@@ -33,26 +33,22 @@ jobs:
         with:
           node-version: '18'
 
-      # Step 3: Install the Aseprite utility LOCALLY.
-      # This creates a local 'node_modules' directory with the tool inside.
-      - name: Install Aseprite utility (ase-util)
-        run: npm install ase-util
+      # Step 3: Install the Aseprite parser library LOCALLY.
+      # We are now installing a library, not a command-line tool.
+      - name: Install Aseprite parser
+        run: npm install aseprite-parser
 
-      # Step 4: Create a directory for the published site.
-      - name: Create public directory
-        run: mkdir public
-
-      # Step 5: Convert the Aseprite file to JSON using a direct path.
-      # Instead of relying on npx, we call the executable directly from where npm installed it.
-      # This is the most reliable method and bypasses any path resolution issues.
+      # Step 4: Run our custom conversion script.
+      # We now execute our own Node.js script to perform the conversion.
+      # This is the most reliable method.
       - name: Convert Aseprite to JSON
-        run: ./node_modules/.bin/ase-util export --output-dir public --data-filename canvas.json source/canvas.aseprite
+        run: node scripts/convert.js
 
-      # Step 6: Copy the main HTML file to the public directory.
+      # Step 5: Copy the main HTML file to the public directory.
       - name: Copy index.html into public directory
         run: cp index.html public/
 
-      # Step 7: Deploy the contents of the 'public' directory to GitHub Pages.
+      # Step 6: Deploy the contents of the 'public' directory to GitHub Pages.
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
