@@ -12,7 +12,7 @@ Here, you can monitor your website's status and find the link to it.
 
 | Build Status | Your Website URL |
 | :---: | :---: |
-| [![Build Status](https://github.com/${{github.repository}}/actions/workflows/deploy.yml/badge.svg)](https://github.com/${{github.repository}}/actions) | **[https://${{github.repository_owner}}.github.io/${{github.event.repository.name}}/](https://${{github.repository_owner}}.github.io/${{github.event.repository.name}}/)** |
+| [![Build Status](https://github.com/${{ github.repository }}/actions/workflows/deploy.yml/badge.svg)](https://github.com/${{ github.repository }}/actions) | **[https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/)** |
 
 * **Green checkmark ✅** means your canvas has been successfully processed and published.
 * **Yellow circle 🟡** means the robot is currently working. Please wait 2-3 minutes.
@@ -24,7 +24,7 @@ Here, you can monitor your website's status and find the link to it.
 
 Your entire workflow is just **one simple action**: uploading your Aseprite project file.
 
-[➡️ Click Here to Upload Your File](https://github.com/${{github.repository}}/upload/main/source)
+[➡️ Click Here to Upload Your File](https://github.com/${{ github.repository }}/upload/main/source)
 
 **Simple Instructions:**
 
