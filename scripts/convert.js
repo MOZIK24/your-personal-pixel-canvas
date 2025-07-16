@@ -4,8 +4,11 @@
 const fs = require('fs');
 const path = require('path');
 
+// --- FIX ---
 // Import the Aseprite parser library.
-const { parse } = require('aseprite-parser');
+// The previous version used { parse }, which was incorrect for this specific library.
+// The correct way is to assign the entire export of the module to the 'parse' constant.
+const parse = require('aseprite-parser');
 
 // Define the paths for our input and output files.
 // process.cwd() gives the root directory of our project in the GitHub runner.
