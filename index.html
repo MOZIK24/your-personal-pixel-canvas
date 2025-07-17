@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Pixel Canvas</title>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background-color: #1d1f21; font-family: sans-serif;
+            touch-action: none; /* Prevents default browser touch behaviors like pull-to-refresh */
+        }
+        #canvas-container { width: 100%; height: 100%; cursor: grab; position: relative; }
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #loader {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #1d1f21; display: flex; justify-content: center;
+            align-items: center; color: white; font-size: 24px; z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="loader">Loading...</div>
+    <div id="canvas-container">
+        <canvas id="pixel-canvas"></canvas>
+    </div>
+
+    <script>
+        // --- SETUP ---
+        const canvas = document.getElementById('pixel-canvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const loader = document.getElementById('loader');
+        const container = document.getElementById('canvas-container');
+
+        // --- STATE ---
+        let transform = { x: 0, y: 0, scale: 1 };
+        let imageInfo = { width: 0, height: 0, tileSize: 0 };
+        let isDragging = false;
+        let lastPos = { x: 0, y: 0 };
+        let touch = { lastDist: 0, isPinching: false };
+        let renderRequested = false;
+        
+        // --- TILE MANAGEMENT & LOADING QUEUE (REFACTORED) ---
+        const tileCache = {}; 
+        const tileRequestQueue = new Set();
+        const loadingTiles = new Set();
+        const MAX_CONCURRENT_DOWNLOADS = 6;
+        let activeDownloads = 0;
+
+        // --- Debounce utility ---
+        function debounce(func, delay) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+
+        // --- CORE RENDER LOGIC ---
+        function render() {
+            renderRequested = false;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            
+            ctx.fillStyle = '#1d1f21';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (!imageInfo.tileSize) return;
+
+            const { tileSize, width, height } = imageInfo;
+            const view = {
+                x: -transform.x / transform.scale,
+                y: -transform.y / transform.scale,
+                w: canvas.width / transform.scale,
+                h: canvas.height / transform.scale
+            };
+
+            const startCol = Math.floor(view.x / tileSize);
+            const endCol = Math.ceil((view.x + view.w) / tileSize);
+            const startRow = Math.floor(view.y / tileSize);
+            const endRow = Math.ceil((view.y + view.h) / tileSize);
+            
+            const maxCol = Math.ceil(width / tileSize);
+            const maxRow = Math.ceil(height / tileSize);
+
+            ctx.save();
+            ctx.translate(transform.x, transform.y);
+            ctx.scale(transform.scale, transform.scale);
+            
+            for (let row = Math.max(0, startRow); row < Math.min(endRow, maxRow); row++) {
+                for (let col = Math.max(0, startCol); col < Math.min(endCol, maxCol); col++) {
+                    const tileX = col * tileSize;
+                    const tileY = row * tileSize;
+                    const tileId = `${tileY}_${tileX}`;
+                    
+                    if (tileCache[tileId]) {
+                        ctx.drawImage(tileCache[tileId], tileX, tileY);
+                    }
+                }
+            }
+            ctx.restore();
+        }
+
+        function requestRender() {
+            if (!renderRequested) {
+                renderRequested = true;
+                requestAnimationFrame(render);
+            }
+        }
+
+        // --- TILE LOADING LOGIC (REFACTORED) ---
+        function updateNeededTiles() {
+            if (!imageInfo.tileSize) return;
+            const { tileSize, width, height } = imageInfo;
+            const view = { x: -transform.x / transform.scale, y: -transform.y / transform.scale, w: canvas.width / transform.scale, h: canvas.height / transform.scale };
+            
+            const startCol = Math.floor(view.x / tileSize);
+            const endCol = Math.ceil((view.x + view.w) / tileSize);
+            const startRow = Math.floor(view.y / tileSize);
+            const endRow = Math.ceil((view.y + view.h) / tileSize);
+
+            const maxCol = Math.ceil(width / tileSize);
+            const maxRow = Math.ceil(height / tileSize);
+
+            for (let row = Math.max(0, startRow); row < Math.min(endRow, maxRow); row++) {
+                for (let col = Math.max(0, startCol); col < Math.min(endCol, maxCol); col++) {
+                    const tileX = col * tileSize;
+                    const tileY = row * tileSize;
+                    const tileId = `${tileY}_${tileX}`;
+
+                    if (!tileCache[tileId] && !loadingTiles.has(tileId)) {
+                        tileRequestQueue.add(tileId);
+                    }
+                }
+            }
+            processTileQueue();
+        }
+
+        const debouncedUpdateNeededTiles = debounce(updateNeededTiles, 200);
+
+        function processTileQueue() {
+            while (activeDownloads < MAX_CONCURRENT_DOWNLOADS && tileRequestQueue.size > 0) {
+                const tileId = tileRequestQueue.values().next().value;
+                tileRequestQueue.delete(tileId);
+                loadTile(tileId);
+            }
+        }
+
+        async function loadTile(tileId) {
+            // --- NEW: Redundant safeguard against invalid tile IDs ---
+            const [tileY, tileX] = tileId.split('_').map(Number);
+            if (tileY < 0 || tileX < 0 || isNaN(tileY) || isNaN(tileX)) {
+                console.warn(`Skipping request for invalid tile: ${tileId}`);
+                return;
+            }
+
+            if (loadingTiles.has(tileId)) return;
+
+            try {
+                loadingTiles.add(tileId);
+                activeDownloads++;
+                
+                const response = await fetch(`tiles/tile_${tileY}_${tileX}.bin`);
+                if (!response.ok) throw new Error(`Tile not found: ${tileId}`);
+                
+                const pixelBuffer = await response.arrayBuffer();
+                const imageData = new ImageData(new Uint8ClampedArray(pixelBuffer), imageInfo.tileSize, imageInfo.tileSize);
+                
+                const tileCanvas = document.createElement('canvas');
+                tileCanvas.width = imageInfo.tileSize;
+                tileCanvas.height = imageInfo.tileSize;
+                tileCanvas.getContext('2d').putImageData(imageData, 0, 0);
+
+                tileCache[tileId] = tileCanvas;
+                requestRender();
+
+            } catch (error) {
+                 // console.error(`Failed to load tile ${tileId}:`, error);
+            } finally {
+                loadingTiles.delete(tileId);
+                activeDownloads--;
+                // After a slot frees up, try to process the rest of the queue
+                processTileQueue();
+            }
+        }
+
+        // --- INITIALIZATION ---
+        async function initialize() {
+            try {
+                loader.textContent = 'Loading manifest...';
+                const metaResponse = await fetch('manifest.json');
+                if (!metaResponse.ok) throw new Error(`HTTP error! status: ${metaResponse.status}`);
+                imageInfo = await metaResponse.json();
+
+                centerAndFitImage();
+                loader.style.display = 'none';
+                requestRender();
+                debouncedUpdateNeededTiles(); // Initial load
+
+            } catch (error) {
+                loader.textContent = "Error loading canvas. Check console.";
+                console.error('Initialization failed:', error);
+            }
+        }
+        
+        function centerAndFitImage() {
+            const scaleX = container.clientWidth / imageInfo.width;
+            const scaleY = container.clientHeight / imageInfo.height;
+            transform.scale = Math.min(scaleX, scaleY) * 0.9;
+            transform.x = (container.clientWidth - (imageInfo.width * transform.scale)) / 2;
+            transform.y = (container.clientHeight - (imageInfo.height * transform.scale)) / 2;
+        }
+
+        // --- USER INPUT HANDLERS (MOUSE & TOUCH) ---
+        function handlePanStart(x, y) { isDragging = true; container.style.cursor = 'grabbing'; lastPos = { x, y }; }
+        function handlePanMove(x, y) { if (!isDragging) return; const dx = x - lastPos.x; const dy = y - lastPos.y; transform.x += dx; transform.y += dy; lastPos = { x, y }; requestRender(); debouncedUpdateNeededTiles(); }
+        function handlePanEnd() { isDragging = false; container.style.cursor = 'grab'; debouncedUpdateNeededTiles(); }
+        function handleZoom(scaleAmount, centerX, centerY) { const oldScale = transform.scale; transform.scale *= scaleAmount; transform.scale = Math.max(0.02, Math.min(transform.scale, 100)); transform.x = centerX - (centerX - transform.x) * (transform.scale / oldScale); transform.y = centerY - (centerY - transform.y) * (transform.scale / oldScale); requestRender(); debouncedUpdateNeededTiles(); }
+
+        container.addEventListener('mousedown', (e) => handlePanStart(e.clientX, e.clientY));
+        container.addEventListener('mousemove', (e) => handlePanMove(e.clientX, e.clientY));
+        container.addEventListener('mouseup', handlePanEnd);
+        container.addEventListener('mouseleave', handlePanEnd);
+        container.addEventListener('wheel', (e) => { e.preventDefault(); const scaleAmount = e.deltaY < 0 ? 1.1 : 1 / 1.1; handleZoom(scaleAmount, e.clientX, e.clientY); });
+        container.addEventListener('touchstart', (e) => { if (e.touches.length === 1) { handlePanStart(e.touches[0].clientX, e.touches[0].clientY); } else if (e.touches.length === 2) { isDragging = false; touch.isPinching = true; touch.lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); } });
+        container.addEventListener('touchmove', (e) => { e.preventDefault(); if (e.touches.length === 1 && isDragging) { handlePanMove(e.touches[0].clientX, e.touches[0].clientY); } else if (e.touches.length === 2 && touch.isPinching) { const newDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); const scaleAmount = newDist / touch.lastDist; const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2; const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2; handleZoom(scaleAmount, centerX, centerY); touch.lastDist = newDist; } });
+        container.addEventListener('touchend', (e) => { if (e.touches.length < 2) touch.isPinching = false; if (e.touches.length < 1) handlePanEnd(); });
+        
+        // --- START ---
+        initialize();
+        window.addEventListener('resize', () => { centerAndFitImage(); requestRender(); debouncedUpdateNeededTiles(); });
+    </script>
+</body>
+</html>
