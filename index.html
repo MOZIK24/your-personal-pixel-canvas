@@ -45,14 +45,15 @@
         let isDragging = false;
         let lastPos = { x: 0, y: 0 };
         let touch = { lastDist: 0, isPinching: false };
+        let renderRequested = false;
         
         // --- TILE MANAGEMENT & LOADING QUEUE ---
         const tileCache = {}; 
         const loadingTiles = new Set();
-        const MAX_CONCURRENT_DOWNLOADS = 6; // Reduced for safety
+        const MAX_CONCURRENT_DOWNLOADS = 6;
         let activeDownloads = 0;
 
-        // --- NEW: Debounce utility ---
+        // --- Debounce utility ---
         function debounce(func, delay) {
             let timeout;
             return function(...args) {
@@ -62,8 +63,8 @@
         }
 
         // --- CORE RENDER LOGIC ---
-        // This function runs on every frame for smooth visuals, but only draws cached tiles.
         function render() {
+            renderRequested = false;
             canvas.width = container.clientWidth;
             canvas.height = container.clientHeight;
             
@@ -94,7 +95,10 @@
                     const tileX = col * tileSize;
                     const tileY = row * tileSize;
                     
-                    if (tileX >= imageInfo.width || tileY >= imageInfo.height) continue;
+                    // --- FIX: Add boundary checks for negative coordinates ---
+                    if (tileX < 0 || tileY < 0 || tileX >= imageInfo.width || tileY >= imageInfo.height) {
+                        continue;
+                    }
 
                     const tileId = `${tileY}_${tileX}`;
                     
@@ -106,7 +110,14 @@
             ctx.restore();
         }
 
-        // --- NEW: Separate function to find and queue needed tiles ---
+        function requestRender() {
+            if (!renderRequested) {
+                renderRequested = true;
+                requestAnimationFrame(render);
+            }
+        }
+
+        // --- Separate function to find and queue needed tiles ---
         function updateAndLoadTiles() {
             if (!imageInfo.tileSize) return;
             const { tileSize } = imageInfo;
@@ -121,7 +132,12 @@
                 for (let col = startCol; col < endCol; col++) {
                     const tileX = col * tileSize;
                     const tileY = row * tileSize;
-                    if (tileX >= imageInfo.width || tileY >= imageInfo.height) continue;
+                    
+                    // --- FIX: Add boundary checks for negative coordinates ---
+                    if (tileX < 0 || tileY < 0 || tileX >= imageInfo.width || tileY >= imageInfo.height) {
+                        continue;
+                    }
+
                     const tileId = `${tileY}_${tileX}`;
                     if (!tileCache[tileId] && !loadingTiles.has(tileId)) {
                         queue.push(tileId);
@@ -140,9 +156,6 @@
             for (const tileId of queue) {
                 if (activeDownloads < MAX_CONCURRENT_DOWNLOADS) {
                     loadTile(tileId);
-                } else {
-                    // If we are busy, we can implement a waiting queue later if needed.
-                    // For now, we just won't start new downloads.
                 }
             }
         }
@@ -155,7 +168,6 @@
                 activeDownloads++;
 
                 const [tileY, tileX] = tileId.split('_').map(Number);
-                // FIX: Correctly construct the filename using tile coordinates.
                 const response = await fetch(`tiles/tile_${tileY}_${tileX}.bin`);
                 if (!response.ok) throw new Error(`Tile not found: ${tileId}`);
                 
@@ -168,15 +180,14 @@
                 tileCanvas.getContext('2d').putImageData(imageData, 0, 0);
 
                 tileCache[tileId] = tileCanvas;
-                requestAnimationFrame(render);
+                requestRender();
 
             } catch (error) {
                  // console.error(`Failed to load tile ${tileId}:`, error);
             } finally {
                 loadingTiles.delete(tileId);
                 activeDownloads--;
-                // After a download finishes, check for more tiles to load.
-                debouncedUpdateAndLoadTiles();
+                processTileQueue([]); // Check if more can be loaded from the main queue
             }
         }
 
@@ -190,7 +201,7 @@
 
                 centerAndFitImage();
                 loader.style.display = 'none';
-                requestAnimationFrame(render);
+                requestRender();
                 debouncedUpdateAndLoadTiles(); // Initial load
 
             } catch (error) {
@@ -209,9 +220,9 @@
 
         // --- USER INPUT HANDLERS (MOUSE & TOUCH) ---
         function handlePanStart(x, y) { isDragging = true; container.style.cursor = 'grabbing'; lastPos = { x, y }; }
-        function handlePanMove(x, y) { if (!isDragging) return; const dx = x - lastPos.x; const dy = y - lastPos.y; transform.x += dx; transform.y += dy; lastPos = { x, y }; requestAnimationFrame(render); debouncedUpdateAndLoadTiles(); }
+        function handlePanMove(x, y) { if (!isDragging) return; const dx = x - lastPos.x; const dy = y - lastPos.y; transform.x += dx; transform.y += dy; lastPos = { x, y }; requestRender(); debouncedUpdateAndLoadTiles(); }
         function handlePanEnd() { isDragging = false; container.style.cursor = 'grab'; }
-        function handleZoom(scaleAmount, centerX, centerY) { const oldScale = transform.scale; transform.scale *= scaleAmount; transform.scale = Math.max(0.02, Math.min(transform.scale, 100)); transform.x = centerX - (centerX - transform.x) * (transform.scale / oldScale); transform.y = centerY - (centerY - transform.y) * (transform.scale / oldScale); requestAnimationFrame(render); debouncedUpdateAndLoadTiles(); }
+        function handleZoom(scaleAmount, centerX, centerY) { const oldScale = transform.scale; transform.scale *= scaleAmount; transform.scale = Math.max(0.02, Math.min(transform.scale, 100)); transform.x = centerX - (centerX - transform.x) * (transform.scale / oldScale); transform.y = centerY - (centerY - transform.y) * (transform.scale / oldScale); requestRender(); debouncedUpdateAndLoadTiles(); }
 
         container.addEventListener('mousedown', (e) => handlePanStart(e.clientX, e.clientY));
         container.addEventListener('mousemove', (e) => handlePanMove(e.clientX, e.clientY));
@@ -224,7 +235,7 @@
         
         // --- START ---
         initialize();
-        window.addEventListener('resize', () => { centerAndFitImage(); requestAnimationFrame(render); debouncedUpdateAndLoadTiles(); });
+        window.addEventListener('resize', () => { centerAndFitImage(); requestRender(); debouncedUpdateAndLoadTiles(); });
     </script>
 </body>
 </html>
