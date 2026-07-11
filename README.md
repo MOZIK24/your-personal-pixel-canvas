@@ -1,6 +1,6 @@
 # Your AsePersonal Canvas
 
-Local-first pixel canvas studio: place PNG / Aseprite pieces on a huge canvas, save versions in a folder on your PC, share a single self-contained HTML.
+Local pixel canvas studio: place PNG / Aseprite pieces on a huge canvas, save versions in a folder on your PC, share a single self-contained HTML.
 
 **Chrome or Edge required** (File System Access API).
 
@@ -44,5 +44,5 @@ Deploy of this editor: [`.github/workflows/deploy-studio.yml`](.github/workflows
 
 ## Credit
 
-- [mozik24](https://github.com/mozik24) — idea
-- Legacy pipeline: [`legacy/`](legacy/)
+- [mozik24](https://github.com/mozik24) — idea (only he would come up with such a narrow idea)
+- replica42 — code (vibecoding, or even more worse things)
