@@ -1,0 +1,13 @@
+# Personal Pixel Studio — local project folders (never commit art saves here)
+node_modules
+dist
+.DS_Store
+*.local
+.vscode
+.idea
+
+# Accidental project workspace linked inside the repo clone
+/assets/
+/saves/
+/project.json
+/style.json
